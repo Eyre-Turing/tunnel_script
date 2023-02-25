@@ -1,3 +1,131 @@
 #!/bin/bash
 
+cd "$(dirname "$BASH_SOURCE")"
 
+TOOLS=(
+    "nc"
+)
+
+for tool in "${TOOLS[@]}"; do
+    if ! type "$tool" &>/dev/null; then
+        echo "Request '$tool', please install it." >&2
+        exit 1
+    fi
+done
+
+usage()
+{
+cat << EOF
+Usage: $0 <real_server_ip> <real_server_port> <virtual_server_ip> <virtual_server_manager_port> <virtual_server_user_port>
+    options:
+        -h      Show this message and exit.
+        -f      Do not show dialog even if param error.
+EOF
+}
+
+ARGS=$(getopt -o 'hf' -- "$@")
+[ $? -ne 0 ] && exit 1
+eval "set -- $ARGS"
+
+USE_DIALOG="yes"
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        "-h")
+            usage
+            exit 0
+            ;;
+        "-f")
+            USE_DIALOG="no"
+            ;;
+        "--")
+            shift
+            break
+            ;;
+    esac
+    shift
+done
+
+SERV_IP=$1
+SERV_PORT=$2
+V_SERV_IP=$3
+V_CLI_MGR_PORT=$4
+V_CLI_USER_PORT=$5
+
+input_config()
+{
+    local tmp=$(mktemp)
+    dialog --form Configure 0 0 5 \
+        'real server ip' 1 1 "$SERV_IP" 1 30 30 50 \
+        'real server port' 2 1 "$SERV_PORT" 2 30 30 50 \
+        'virtual server ip' 3 1 "$V_SERV_IP" 3 30 30 50 \
+        'virtual server manager port' 4 1 "$V_CLI_MGR_PORT" 4 30 30 50 \
+        'virtual server user port' 5 1 "$V_CLI_USER_PORT" 5 30 30 50 \
+        2>"$tmp"
+    local ret=$?
+    SERV_IP=$(sed -n '1p' "$tmp")
+    sed -i '1d' "$tmp"
+    SERV_PORT=$(sed -n '1p' "$tmp")
+    sed -i '1d' "$tmp"
+    V_SERV_IP=$(sed -n '1p' "$tmp")
+    sed -i '1d' "$tmp"
+    V_CLI_MGR_PORT=$(sed -n '1p' "$tmp")
+    sed -i '1d' "$tmp"
+    V_CLI_USER_PORT=$(sed -n '1p' "$tmp")
+    rm -f "$tmp"
+    return "$ret"
+}
+
+show_error()
+{
+    local msg=$1
+    if [ "$USE_DIALOG" == "yes" ] && type dialog &>/dev/null; then
+        dialog --msgbox "$msg" 5 60
+    else
+        echo "$msg" >&2
+    fi
+}
+
+check_config()
+{
+    if [ -z "$SERV_IP" ] || [ -z "$SERV_PORT" ] || [ -z "$V_SERV_IP" ] || [ -z "$V_CLI_MGR_PORT" ] || [ -z "$V_CLI_USER_PORT" ]; then
+        show_error "exist empty param."
+        return 1
+    fi
+
+    echo "$SERV_PORT" | grep -q '[^0-9]' && show_error "real server port must be 0~65535 int." && return 1
+    echo "$V_CLI_MGR_PORT" | grep -q '[^0-9]' && show_error "virtual server manager port must be 0~65535 int." && return 1
+    echo "$V_CLI_USER_PORT" | grep -q '[^0-9]' && show_error "virtual server user port must be 0~65535 int." && return 1
+
+    ((SERV_PORT > 65535)) && show_error "real server port must be 0~65535 int." && return 1
+    ((V_CLI_MGR_PORT > 65535)) && show_error "virtual server manager port must be 0~65535 int." && return 1
+    ((V_CLI_USER_PORT > 65535)) && show_error "virtual server user port must be 0~65535 int." && return 1
+
+    return 0
+}
+
+if [ $# -lt 5 ]; then
+    if [ "$USE_DIALOG" == "no" ] || ! type dialog &>/dev/null; then
+        usage >&2
+        exit 1
+    fi
+    input_config || exit 1
+fi
+
+while ! check_config; do
+    if [ "$USE_DIALOG" == "no" ] || ! type dialog &>/dev/null; then
+        echo "check config failed." >&2
+        exit 1
+    fi
+    input_config || exit 1
+done
+
+cat >&2 << EOF
+real server ip              : $SERV_IP
+real server port            : $SERV_PORT
+virtual server ip           : $V_SERV_IP
+virtual server manager port : $V_CLI_MGR_PORT
+virtual server user port    : $V_CLI_USER_PORT
+EOF
+
+./v_cli_mgr.sh "$SERV_IP" "$SERV_PORT" "$V_SERV_IP" "$V_CLI_MGR_PORT" "$V_CLI_USER_PORT"
