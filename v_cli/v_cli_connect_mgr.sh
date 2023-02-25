@@ -13,7 +13,7 @@ create_connect()
     local v_serv_mgr_cmd
     read v_serv_mgr_cmd
     if [ "$v_serv_mgr_cmd" == "user in" ]; then
-        nc "$V_SERV_IP" "$V_CLI_USER_PORT" -c "./v_cli_connect.sh $SERV_IP $SERV_PORT" &
+        nc "$V_SERV_IP" "$V_CLI_USER_PORT" -c "nc $SERV_IP $SERV_PORT" &
     fi
 }
 

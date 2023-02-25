@@ -8,7 +8,7 @@ V_CLI_USER_PORT=$2
 
 create_listen()
 {
-    nc -lp "$USER_PORT" -c "./v_serv_listen.sh $V_CLI_USER_PORT" &
+    nc -lp "$USER_PORT" -c "nc -lp $V_CLI_USER_PORT" &
 
     # 下面的命令用于检测上面的nc是否处于监听用户连接状态，如果处于，将卡住，直到监听到
     while ss -tunlpa | awk "\$5~/:${USER_PORT}$/{print \$2}" | grep -q LISTEN; do
